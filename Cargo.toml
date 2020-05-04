@@ -1,5 +1,5 @@
 [package]
-name = "cmc-rust"
+name = "rucmic"
 version = "0.1.0"
 authors = ["Micah Switzer <micah.switzer.dev@outlook.com>"]
 edition = "2018"
