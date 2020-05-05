@@ -9,7 +9,7 @@ use clap::Clap;
 mod ast;
 mod lexer;
 mod parser;
-//mod codegen;
+mod codegen;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let opts: Opts = Opts::parse();
@@ -55,8 +55,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     #[cfg(debug_assertions)]
     eprintln!("prog: {:?}", program);
     // generate the code!
-    //let codegen = codegen::CodeGen::new("main");
-    //let code = codegen.gen(&program).unwrap();
+    let context = inkwell::context::Context::create();
+    let codegen = codegen::CodeGen::new(&context, "main");
+    // unwrap a present from the code generator
+    codegen.gen(&program).unwrap();
 
     // ok...we made it
     Ok(())
