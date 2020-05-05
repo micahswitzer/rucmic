@@ -272,3 +272,6 @@ impl std::fmt::Display for ParseError {
         }
     }
 }
+
+// default implementation
+impl Error for ParseError { }
