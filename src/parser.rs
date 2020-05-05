@@ -5,6 +5,8 @@ use crate::lexer::*;
 extern crate plex;
 use plex::parser;
 
+use std::error::Error;
+
 parser! {
     fn parse_(Token, Span);
 
@@ -243,10 +245,30 @@ parser! {
     }
 }
 
+#[derive(Debug)]
+pub struct ParseError {
+    pub token: Option<(Token, Span)>,
+    pub message: &'static str,
+}
+
 // the public parsing function
 pub fn parse<I: Iterator<Item = (Token, Span)>>(
     i: I,
-) -> Result<Program, (Option<(Token, Span)>, &'static str)> {
-    parse_(i)
+) -> Result<Program, ParseError> {
+    match parse_(i) {
+        Ok(k) => Ok(k),
+        Err(e) => Err(ParseError {
+            token: e.0,
+            message: e.1
+        }),
+    }
 }
 
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.token {
+            Some(s) => write!(f, "{}: {:?}, {:?}", self.message, s.0, s.1),
+            None => write!(f, "{}", self.message)
+        }
+    }
+}
