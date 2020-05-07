@@ -1,20 +1,16 @@
 use std::collections::HashMap;
 use std::convert::TryInto;
-use inkwell::{
-    context::Context,
-    module::Module,
-    builder::Builder,
-    values::{
-        BasicValue,
-        BasicValueEnum,
-        IntValue,
-        FunctionValue,
-        PointerValue
-    },
-    types::{ BasicType, BasicTypeEnum, AnyTypeEnum },
-    IntPredicate,
-};
+use inkwell::{context::Context, module::Module, builder::Builder, values::{
+    BasicValue,
+    BasicValueEnum,
+    IntValue,
+    FunctionValue,
+    PointerValue
+}, types::{BasicType, BasicTypeEnum, AnyTypeEnum}, IntPredicate, AddressSpace};
 use crate::ast::*;
+use inkwell::types::FunctionType;
+use std::borrow::Borrow;
+use crate::ast::BaseType::Void;
 
 // TODO: keep track of register numbers?
 pub struct CodeGen<'ctx> {
@@ -31,14 +27,26 @@ impl<'ctx> CodeGen<'ctx> {
         self.module.get_function(name)
     }
 
-    #[inline]
-    fn get_llvm_type(&self, ast_type: Type, arr_size: Option<u32>) -> BasicTypeEnum {
-        let basic_type: BasicTypeEnum = match ast_type {
-            Type::Int => self.context.i64_type().into(),
+    fn get_llvm_type(&self, ast_type: &Type) -> BasicTypeEnum {
+        if (match ast_type.base_type { BaseType::Void => true, _ => false }) && ast_type.is_ptr {
+            // this is a special case that can't be handled generically
+            return self.context.i8_type().ptr_type(AddressSpace::Generic).into();
+        }
+        let basic_type: BasicTypeEnum = match ast_type.base_type {
+            BaseType::Int => self.context.i64_type().into(),
+            BaseType::Char => self.context.i8_type().into(),
+            // for now this function can't handle non-pointer void types
+            BaseType::Void => panic!("invalid type")
         };
-        match arr_size {
+        let arr_type = match ast_type.array_size {
             Some(size) => basic_type.array_type(size).into(),
             None => basic_type
+        };
+        if ast_type.is_ptr {
+            arr_type.ptr_type(AddressSpace::Generic).into()
+        }
+        else {
+            arr_type
         }
     }
 
@@ -54,8 +62,8 @@ impl<'ctx> CodeGen<'ctx> {
     /// Compiles the specified `Program`
     pub fn compile_program(&self, program: &Program) -> Result<(), CodeGenError> {
         // generate code for each of the decls
-        for decl in program.decls {
-            self.compile_decl(&decl, true)?;
+        for decl in program.decls.iter().as_ref() {
+            self.compile_decl(decl, true)?;
         }
         Ok(())
     }
@@ -101,14 +109,12 @@ impl<'ctx> CodeGen<'ctx> {
                     return Err(CodeGenError { span: Some(decl.span), message: String::from("Duplicate function declaration.") });
                 }
 
-                let arg_types = fn_args.iter().as_ref().map(|arg| self.context.i64_type()).collect::<Vec<BasicTypesEnum>>;
+                let arg_vals = fn_args
+                    .iter()
+                    .map(|arg| self.get_llvm_type(arg.1.borrow()))
+                    .collect::<Vec<BasicTypeEnum>>();
 
-                let fn_val = match fn_type {
-                    Type::Int => self.context.i64_type().fn_type(arg_types)
-                }
-                
-                let ret_type = self.get_llvm_type(*fn_type);
-                ret_type.
+                let fn_val: FunctionType = self.get_llvm_type(fn_type).fn_type(&arg_vals, false);
 
                 // compile the function body
                 self.compile_stmt(fn_body)?;
@@ -119,7 +125,7 @@ impl<'ctx> CodeGen<'ctx> {
                 if self.variables.contains_key(var_name) {
                     return Err(CodeGenError { span: Some(decl.span), message: String::from("Duplicate variable declaration.") });
                 }
-                self.create_entry_block
+                //self.create_entry_block.
                 Ok(())
             }
         }

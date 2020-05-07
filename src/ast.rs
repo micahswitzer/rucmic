@@ -73,14 +73,13 @@ pub enum Decl_ {
 
 #[derive(Debug)]
 pub struct Type {
-    base_type: BaseType,
-    array_size: Option<u32>,
-    is_ptr: bool,
+    pub base_type: BaseType,
+    pub array_size: Option<u32>,
+    pub is_ptr: bool,
 }
 
 #[derive(Debug)]
 pub enum BaseType {
-    Compound(Box<Type>),
     Int,
     Char,
     Void,

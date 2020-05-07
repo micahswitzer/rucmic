@@ -58,7 +58,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let context = inkwell::context::Context::create();
     let codegen = codegen::CodeGen::new(&context, "main");
     // unwrap a present from the code generator
-    codegen.gen(&program).unwrap();
+    codegen.compile_program(&program).unwrap();
 
     // ok...we made it
     Ok(())
