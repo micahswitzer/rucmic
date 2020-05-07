@@ -162,27 +162,27 @@ parser! {
     simpleExpression: Expr {
         additiveExpr[a] LessThan additiveExpr[b] => Expr {
             span: span!(),
-            node: Expr_::CmpLT(Box::new(a), Box::new(b)),
+            node: Expr_::BinOp(BinOp::CmpLT, Box::new(a), Box::new(b)),
         },
         additiveExpr[a] GreaterThan additiveExpr[b] => Expr {
             span: span!(),
-            node: Expr_::CmpGT(Box::new(a), Box::new(b)),
+            node: Expr_::BinOp(BinOp::CmpGT, Box::new(a), Box::new(b)),
         },
         additiveExpr[a] LessThanEqual additiveExpr[b] => Expr {
             span: span!(),
-            node: Expr_::CmpLTE(Box::new(a), Box::new(b)),
+            node: Expr_::BinOp(BinOp::CmpLTE, Box::new(a), Box::new(b)),
         },
         additiveExpr[a] GreaterThanEqual additiveExpr[b] => Expr {
             span: span!(),
-            node: Expr_::CmpGTE(Box::new(a), Box::new(b)),
+            node: Expr_::BinOp(BinOp::CmpGTE, Box::new(a), Box::new(b)),
         },
         additiveExpr[a] Equals additiveExpr[b] => Expr {
             span: span!(),
-            node: Expr_::CmpEq(Box::new(a), Box::new(b)),
+            node: Expr_::BinOp(BinOp::CmpEq, Box::new(a), Box::new(b)),
         },
         additiveExpr[a] NotEquals additiveExpr[b] => Expr {
             span: span!(),
-            node: Expr_::CmpNE(Box::new(a), Box::new(b)),
+            node: Expr_::BinOp(BinOp::CmpNE, Box::new(a), Box::new(b)),
         },
         additiveExpr[e] => e
     }
@@ -190,11 +190,11 @@ parser! {
     additiveExpr: Expr {
         additiveExpr[a] Plus termExpr[b] => Expr {
             span: span!(),
-            node: Expr_::Add(Box::new(a), Box::new(b)),
+            node: Expr_::BinOp(BinOp::Add, Box::new(a), Box::new(b)),
         },
         additiveExpr[a] Minus termExpr[b] => Expr {
             span: span!(),
-            node: Expr_::Sub(Box::new(a), Box::new(b)),
+            node: Expr_::BinOp(BinOp::Sub, Box::new(a), Box::new(b)),
         },
         termExpr[e] => e
     }
@@ -202,11 +202,11 @@ parser! {
     termExpr: Expr {
         termExpr[a] Multiply factorExpr[b] => Expr {
             span: span!(),
-            node: Expr_::Mul(Box::new(a), Box::new(b)),
+            node: Expr_::BinOp(BinOp::Mul, Box::new(a), Box::new(b)),
         },
         termExpr[a] Divide factorExpr[b] => Expr {
             span: span!(),
-            node: Expr_::Div(Box::new(a), Box::new(b)),
+            node: Expr_::BinOp(BinOp::Div, Box::new(a), Box::new(b)),
         },
         factorExpr[e] => e
     }

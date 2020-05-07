@@ -12,17 +12,22 @@ pub struct Expr {
 }
 
 #[derive(Debug)]
+pub enum BinOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    CmpLT,
+    CmpGT,
+    CmpLTE,
+    CmpGTE,
+    CmpEq,
+    CmpNE,
+}
+
+#[derive(Debug)]
 pub enum Expr_ {
-    Add(Box<Expr>, Box<Expr>),
-    Sub(Box<Expr>, Box<Expr>),
-    Mul(Box<Expr>, Box<Expr>),
-    Div(Box<Expr>, Box<Expr>),
-    CmpLT(Box<Expr>, Box<Expr>),
-    CmpGT(Box<Expr>, Box<Expr>),
-    CmpLTE(Box<Expr>, Box<Expr>),
-    CmpGTE(Box<Expr>, Box<Expr>),
-    CmpEq(Box<Expr>, Box<Expr>),
-    CmpNE(Box<Expr>, Box<Expr>),
+    BinOp(BinOp, Box<Expr>, Box<Expr>),
     // var-name, array index, expression
     Assign(String, Option<Box<Expr>>, Box<Expr>),
     Var(String, Option<Box<Expr>>),
