@@ -66,8 +66,8 @@ pub struct Decl {
 
 #[derive(Debug)]
 pub enum Decl_ {
-    VarDecl(Type, String, Option<i64>),
-    // the statement must be a compound statement
+    VarDecl(Type, String),
+    // the statement must be a compound statement (gramatically yes, but the code generator doesn't care)
     FunDecl(Type, String, Vec<(String, Type)>, Box<Stmt>),
 }
 
@@ -108,6 +108,15 @@ impl Type {
             base_type: bt,
             array_size: None,
             is_ptr: true,
+        }
+    }
+
+    pub fn into_arr(self, array_size: u32) -> Type {
+        assert_eq!(self.array_size, None);
+        Type {
+            base_type: self.base_type,
+            is_ptr: self.is_ptr,
+            array_size: Some(array_size)
         }
     }
 }

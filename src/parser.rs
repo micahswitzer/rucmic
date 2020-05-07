@@ -6,6 +6,7 @@ extern crate plex;
 use plex::parser;
 
 use std::error::Error;
+use std::convert::TryInto;
 
 parser! {
     fn parse_(Token, Span);
@@ -39,19 +40,21 @@ parser! {
     }
 
     typeident: (Type, String) {
-        Int Ident(s) => (Type::new_basic(BaseType::Int), s)
-        Int Multiply Ident(s) => 
+        basictype[t] Ident(s) => (Type::new_basic(t), s)
     }
 
     vardecl: Decl {
         typeident[ti] Semicolon => Decl {
             span: span!(),
-            node: Decl_::VarDecl(ti.1, None),
+            node: Decl_::VarDecl(ti.0, ti.1),
         },
-        typeident[ti] LeftSquare Integer(n) RightSquare Semicolon => Decl {
-            span: span!(),
-            node: Decl_::VarDecl(ti.1, Some(n)),
-        }
+        typeident[ti] LeftSquare Integer(n) RightSquare Semicolon => {
+            let arr_type = ti.0.into_arr(n.try_into().unwrap());
+            Decl {
+                span: span!(),
+                node: Decl_::VarDecl(arr_type, ti.1),
+            }
+        } 
     }
 
     fundecl: Decl {
@@ -61,36 +64,30 @@ parser! {
         },
         Void Ident(s) LeftParen paramlist[pl] RightParen compoundstmt[st] => Decl {
             span: span!(),
-            node: Decl_::FunDecl(Type::Void, s, pl, Box::new(st)),
+            node: Decl_::FunDecl(Type::new_basic(BaseType::Void), s, pl, Box::new(st)),
         }
     }
-    
-    // avoided a shift-reduce conflict for now...
-    typed: Type {
-        Int => Type::Int,
-        Void => Type::Void,
+
+    singleparam: (String, Type) {
+        basictype[t] Ident(s) => (s, Type::new_basic(t)),
+        basictype[t] LeftSquare RightSquare Ident(s) => (s, Type::new_ptr(t))
     }
 
-    firstparam: (String, bool) {
-        Int Ident(s) => (s, false),
-        Int LeftSquare RightSquare Ident(s) => (s, true)
-    }
-
-    otherparams: Vec<(String, bool)> {
+    otherparams: Vec<(String, Type)> {
         => vec![],
-        otherparams[mut pl] Comma Int Ident(s) => {
-            pl.push((s, false));
+        otherparams[mut pl] Comma singleparam[p] => {
+            pl.push(p);
             pl
         },
-        otherparams[mut pl] Comma Int LeftSquare RightSquare Ident(s) => {
-            pl.push((s, true));
+        otherparams[mut pl] Comma singleparam[p] => {
+            pl.push(p);
             pl
         }
     }
 
-    paramlist: Vec<(String, bool)> {
+    paramlist: Vec<(String, Type)> {
         Void => vec![],
-        firstparam[fp] otherparams[mut op] => {
+        singleparam[fp] otherparams[mut op] => {
             let mut pl = vec![fp];
             pl.append(&mut op);
             pl
@@ -147,6 +144,7 @@ parser! {
             span: span!(),
             node: Stmt_::Iter(Box::new(e), Box::new(s)),
         },
+        // I don't like that arithmetic and comparison expressions are valid statements...
         expr[e] Semicolon => Stmt {
             span: span!(),
             node: Stmt_::Expr(Box::new(e)),
