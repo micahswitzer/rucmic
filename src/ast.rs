@@ -66,13 +66,48 @@ pub struct Decl {
 
 #[derive(Debug)]
 pub enum Decl_ {
-    VarDecl(String, Option<i64>),
+    VarDecl(Type, String, Option<i64>),
     // the statement must be a compound statement
-    FunDecl(Type, String, Vec<(String, bool)>, Box<Stmt>),
+    FunDecl(Type, String, Vec<(String, Type)>, Box<Stmt>),
 }
 
 #[derive(Debug)]
-pub enum Type {
+pub struct Type {
+    base_type: BaseType,
+    array_size: Option<u32>,
+    is_ptr: bool,
+}
+
+#[derive(Debug)]
+pub enum BaseType {
+    Compound(Box<Type>),
     Int,
+    Char,
     Void,
+}
+
+impl Type {
+    pub fn new(base_type: BaseType, array_size: Option<u32>, is_ptr: bool) -> Type {
+        Type {
+            base_type,
+            array_size,
+            is_ptr,
+        }
+    }
+
+    pub fn new_basic(bt: BaseType) -> Type {
+        Type {
+            base_type: bt,
+            array_size: None,
+            is_ptr: false,
+        }
+    }
+
+    pub fn new_ptr(bt: BaseType) -> Type {
+        Type {
+            base_type: bt,
+            array_size: None,
+            is_ptr: true,
+        }
+    }
 }

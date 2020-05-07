@@ -33,8 +33,14 @@ parser! {
         }
     }
 
+    basictype: BaseType {
+        Int => BaseType::Int,
+        Char => BaseType::Char
+    }
+
     typeident: (Type, String) {
-        Int Ident(s) => (Type::Int, s)
+        Int Ident(s) => (Type::new_basic(BaseType::Int), s)
+        Int Multiply Ident(s) => 
     }
 
     vardecl: Decl {

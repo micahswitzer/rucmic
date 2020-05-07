@@ -4,6 +4,7 @@ use plex::lexer;
 #[derive(Debug)]
 pub enum Token {
     Int,
+    Char,
     If,
     Else,
     While,
@@ -54,6 +55,7 @@ lexer! {
     // keywords
 
     "int" => Token::Int,
+    "char" => Token::Char,
     "if" => Token::If,
     "else" => Token::Else,
     "while" => Token::While,
