@@ -115,7 +115,7 @@ impl<'ctx> CodeGen<'ctx> {
 
                 Ok(())
             },
-            Decl_::VarDecl(var_name, var_size) => {
+            Decl_::VarDecl(var_type, var_name) => {
                 if self.variables.contains_key(var_name) {
                     return Err(CodeGenError { span: Some(decl.span), message: String::from("Duplicate variable declaration.") });
                 }
