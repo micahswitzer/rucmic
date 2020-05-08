@@ -56,7 +56,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     eprintln!("prog: {:?}", program);
     // generate the code!
     let context = inkwell::context::Context::create();
-    let codegen = codegen::CodeGen::new(&context, "main");
+    let mut codegen = codegen::CodeGen::new(&context, "main");
     // unwrap a present from the code generator
     codegen.compile_program(&program).unwrap();
 

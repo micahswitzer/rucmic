@@ -1,24 +1,20 @@
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use inkwell::{context::Context, module::Module, builder::Builder, values::{
-    BasicValue,
     BasicValueEnum,
     IntValue,
     FunctionValue,
     PointerValue
-}, types::{BasicType, BasicTypeEnum, AnyTypeEnum}, IntPredicate, AddressSpace};
+}, types::{BasicType, BasicTypeEnum, FunctionType}, IntPredicate, AddressSpace};
 use crate::ast::*;
-use inkwell::types::FunctionType;
-use std::borrow::Borrow;
-use crate::ast::BaseType::Void;
 
-// TODO: keep track of register numbers?
 pub struct CodeGen<'ctx> {
     context: &'ctx Context,
     module: Module<'ctx>,
     builder: Builder<'ctx>,
     variables: HashMap<String, PointerValue<'ctx>>,
-    //functions: HashMap<String, >
+    fn_val_opt: Option<FunctionValue<'ctx>>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -27,7 +23,7 @@ impl<'ctx> CodeGen<'ctx> {
         self.module.get_function(name)
     }
 
-    fn get_llvm_type(&self, ast_type: &Type) -> BasicTypeEnum {
+    fn get_llvm_type(&self, ast_type: &Type) -> BasicTypeEnum<'ctx> {
         if (match ast_type.base_type { BaseType::Void => true, _ => false }) && ast_type.is_ptr {
             // this is a special case that can't be handled generically
             return self.context.i8_type().ptr_type(AddressSpace::Generic).into();
@@ -50,17 +46,32 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
+    fn get_llvm_fn_type(&self, ret_type: &Type, params: &[BasicTypeEnum<'ctx>], is_variac: bool) -> FunctionType<'ctx> {
+        if ret_type.base_type == BaseType::Void && !ret_type.is_ptr {
+            // handle the special `VoidType` case
+            self.context.void_type().fn_type(params, is_variac)
+        }
+        else {
+            self.get_llvm_type(ret_type).fn_type(params, is_variac)
+        }
+    }
+
+    fn create_entry_block_alloca(&self, name: &str) -> PointerValue<'ctx> {
+        panic!("not implemented");
+    }
+
     pub fn new(context: &'ctx Context, mod_name: &str) -> CodeGen<'ctx> {
         CodeGen {
             context,
             module: context.create_module(mod_name),
             builder: context.create_builder(),
             variables: HashMap::new(),
+            fn_val_opt: None,
         }
     }
 
     /// Compiles the specified `Program`
-    pub fn compile_program(&self, program: &Program) -> Result<(), CodeGenError> {
+    pub fn compile_program(&mut self, program: &Program) -> Result<(), CodeGenError> {
         // generate code for each of the decls
         for decl in program.decls.iter().as_ref() {
             self.compile_decl(decl, true)?;
@@ -69,7 +80,7 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     /// Compiles a `Stmt`
-    fn compile_stmt(&self, stmt: &Stmt) -> Result<(), CodeGenError> {
+    fn compile_stmt(&mut self, stmt: &Stmt) -> Result<(), CodeGenError> {
         match &stmt.node {
             Stmt_::Comp(stmts) => {
                 for s in stmts {
@@ -101,9 +112,9 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     /// Compiles a `Decl`
-    fn compile_decl(&self, decl: &Decl, is_global: bool) -> Result<(), CodeGenError> {
+    fn compile_decl(&mut self, decl: &Decl, is_global: bool) -> Result<(), CodeGenError> {
         match &decl.node {
-            Decl_::FunDecl(fn_type, fn_name, fn_args, fn_body) => {
+            Decl_::FunDecl(fn_ret_type, fn_name, fn_args, fn_body) => {
                 assert!(is_global); // functions may only be declared globally
                 if self.module.get_function(fn_name).is_some() {
                     return Err(CodeGenError { span: Some(decl.span), message: String::from("Duplicate function declaration.") });
@@ -114,10 +125,33 @@ impl<'ctx> CodeGen<'ctx> {
                     .map(|arg| self.get_llvm_type(arg.1.borrow()))
                     .collect::<Vec<BasicTypeEnum>>();
 
-                let fn_val: FunctionType = self.get_llvm_type(fn_type).fn_type(&arg_vals, false);
+                let fn_type = self.get_llvm_fn_type(fn_ret_type, &arg_vals, false);
+                let fn_val = self.module.add_function(fn_name.as_str(), fn_type, None);
+
+                for (i, arg) in fn_val.get_param_iter().enumerate() {
+                    arg.set_name(fn_args[i].0.as_str());
+                }
+
+                let entry = self.context.append_basic_block(fn_val, "entry");
+
+                self.builder.position_at_end(entry);
+
+                self.fn_val_opt = Some(fn_val);
+
+                self.variables.reserve(fn_args.len());
+
+                // so I guess this turns args into local vars, not sure why we can't just use them
+                // directly? Maybe SSA is to blame?
+                for (i, arg) in fn_val.get_param_iter().enumerate() {
+                    let alloca = self.create_entry_block_alloca(fn_args[i].0.as_str());
+                    self.builder.build_store(alloca, arg);
+                    self.variables.insert(fn_args[i].0.clone(), alloca);
+                }
 
                 // compile the function body
                 self.compile_stmt(fn_body)?;
+
+                // TODO: Make it return properly
 
                 Ok(())
             },
@@ -206,4 +240,23 @@ impl<'ctx> CodeGen<'ctx> {
 pub struct CodeGenError {
     message: String,
     span: Option<crate::lexer::Span>,
+}
+
+// I wish that inkwell already had this implemented
+// it's in the documentation, but not the source...figures.
+trait SetName {
+    fn set_name(&self, name: &str);
+}
+impl<'ctx> SetName for BasicValueEnum<'ctx> {
+    /// sets the name of the `BasicValueEnum
+    fn set_name(&self, name: &str) {
+        match self {
+            BasicValueEnum::PointerValue(v) => v.set_name(name),
+            BasicValueEnum::IntValue(v) => v.set_name(name),
+            BasicValueEnum::ArrayValue(v) => v.set_name(name),
+            BasicValueEnum::FloatValue(v) => v.set_name(name),
+            BasicValueEnum::StructValue(v) => v.set_name(name),
+            BasicValueEnum::VectorValue(v) => v.set_name(name),
+        }
+    }
 }

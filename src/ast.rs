@@ -78,7 +78,7 @@ pub struct Type {
     pub is_ptr: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug,PartialEq)]
 pub enum BaseType {
     Int,
     Char,
