@@ -2,6 +2,7 @@ use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use inkwell::{context::Context, module::Module, builder::Builder, values::{
+    BasicValue,
     BasicValueEnum,
     IntValue,
     FunctionValue,
@@ -242,21 +243,3 @@ pub struct CodeGenError {
     span: Option<crate::lexer::Span>,
 }
 
-// I wish that inkwell already had this implemented
-// it's in the documentation, but not the source...figures.
-trait SetName {
-    fn set_name(&self, name: &str);
-}
-impl<'ctx> SetName for BasicValueEnum<'ctx> {
-    /// sets the name of the `BasicValueEnum
-    fn set_name(&self, name: &str) {
-        match self {
-            BasicValueEnum::PointerValue(v) => v.set_name(name),
-            BasicValueEnum::IntValue(v) => v.set_name(name),
-            BasicValueEnum::ArrayValue(v) => v.set_name(name),
-            BasicValueEnum::FloatValue(v) => v.set_name(name),
-            BasicValueEnum::StructValue(v) => v.set_name(name),
-            BasicValueEnum::VectorValue(v) => v.set_name(name),
-        }
-    }
-}
