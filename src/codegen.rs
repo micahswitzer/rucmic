@@ -6,15 +6,18 @@ use inkwell::{context::Context, module::Module, builder::Builder, values::{
     BasicValueEnum,
     IntValue,
     FunctionValue,
+    GlobalValue,
     PointerValue
 }, types::{BasicType, BasicTypeEnum, FunctionType}, IntPredicate, AddressSpace};
 use crate::ast::*;
+use std::env::var;
 
 pub struct CodeGen<'ctx> {
     context: &'ctx Context,
     module: Module<'ctx>,
     builder: Builder<'ctx>,
-    variables: HashMap<String, PointerValue<'ctx>>,
+    global_vars: HashMap<String, GlobalValue<'ctx>>,
+    local_vars: HashMap<String, PointerValue<'ctx>>,
     fn_val_opt: Option<FunctionValue<'ctx>>,
 }
 
@@ -57,8 +60,27 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn create_entry_block_alloca(&self, name: &str) -> PointerValue<'ctx> {
-        panic!("not implemented");
+    fn create_entry_block_alloca(&self, var_type: &Type, name: &str) -> PointerValue<'ctx> {
+        let builder = self.context.create_builder() ;
+
+        let entry = self.fn_val_opt.unwrap().get_first_basic_block().unwrap();
+
+        match entry.get_first_instruction() {
+            Some(first_instr) => builder.position_before(&first_instr),
+            None => builder.position_at_end(entry),
+        }
+
+        builder.build_alloca(self.get_llvm_type(var_type), name)
+    }
+
+    fn get_var_ptr(&self, var_name: &String) -> Option<PointerValue<'ctx>> {
+        match self.global_vars.get(var_name.as_str()) {
+            Some(global_var) => Some(global_var.as_pointer_value()),
+            None => match self.local_vars.get(var_name.as_str()) {
+                Some(local_var) => Some(*local_var),
+                None => None
+            }
+        }
     }
 
     pub fn new(context: &'ctx Context, mod_name: &str) -> CodeGen<'ctx> {
@@ -66,7 +88,8 @@ impl<'ctx> CodeGen<'ctx> {
             context,
             module: context.create_module(mod_name),
             builder: context.create_builder(),
-            variables: HashMap::new(),
+            global_vars: HashMap::new(),
+            local_vars: HashMap::new(),
             fn_val_opt: None,
         }
     }
@@ -101,11 +124,11 @@ impl<'ctx> CodeGen<'ctx> {
             },
             Stmt_::Ret(opt_expr) => {
                 if let Some(expr) = opt_expr {
-                    // there's a return value
-                    self.compile_expr(&expr)?;
+                    let expr_val = self.compile_expr(&expr)?;
+                    self.builder.build_return(Some(&expr_val));
                 }
                 else {
-                    // no return value
+                    self.builder.build_return(None);
                 }
                 Ok(())
             }
@@ -126,8 +149,10 @@ impl<'ctx> CodeGen<'ctx> {
                     .map(|arg| self.get_llvm_type(arg.1.borrow()))
                     .collect::<Vec<BasicTypeEnum>>();
 
-                let fn_type = self.get_llvm_fn_type(fn_ret_type, &arg_vals, false);
-                let fn_val = self.module.add_function(fn_name.as_str(), fn_type, None);
+                let fn_type = self.get_llvm_fn_type(
+                    fn_ret_type, &arg_vals, false);
+                let fn_val = self.module.add_function(
+                    fn_name.as_str(), fn_type, None);
 
                 for (i, arg) in fn_val.get_param_iter().enumerate() {
                     arg.set_name(fn_args[i].0.as_str());
@@ -139,28 +164,44 @@ impl<'ctx> CodeGen<'ctx> {
 
                 self.fn_val_opt = Some(fn_val);
 
-                self.variables.reserve(fn_args.len());
+                self.local_vars.reserve(fn_args.len());
 
                 // so I guess this turns args into local vars, not sure why we can't just use them
                 // directly? Maybe SSA is to blame?
                 for (i, arg) in fn_val.get_param_iter().enumerate() {
-                    let alloca = self.create_entry_block_alloca(fn_args[i].0.as_str());
+                    let alloca = self.create_entry_block_alloca(
+                        &fn_args[i].1, fn_args[i].0.as_str());
                     self.builder.build_store(alloca, arg);
-                    self.variables.insert(fn_args[i].0.clone(), alloca);
+                    self.local_vars.insert(fn_args[i].0.clone(), alloca);
                 }
 
                 // compile the function body
                 self.compile_stmt(fn_body)?;
 
-                // TODO: Make it return properly
+                // no return value for the last return
+                self.builder.build_return(None);
+
+                self.local_vars.clear();
 
                 Ok(())
             },
             Decl_::VarDecl(var_type, var_name) => {
-                if self.variables.contains_key(var_name) {
+                if self.global_vars.contains_key(var_name) || (!is_global && self.local_vars.contains_key(var_name)) {
                     return Err(CodeGenError { span: Some(decl.span), message: String::from("Duplicate variable declaration.") });
                 }
-                //self.create_entry_block.
+                if is_global {
+                    let var_val = self.module.add_global(
+                        self.get_llvm_type(var_type),
+                        None,
+                        var_name.as_str());
+                    self.global_vars.insert(var_name.to_string(), var_val);
+                }
+                else {
+                    let var_val = self.create_entry_block_alloca(
+                        var_type,
+                        var_name.as_str());
+                    self.local_vars.insert(var_name.to_string(), var_val);
+                }
                 Ok(())
             }
         }
@@ -191,10 +232,10 @@ impl<'ctx> CodeGen<'ctx> {
             Expr_::Assign(var_name, array_expr, assign_expr) => {
                 let assign_val = self.compile_expr(assign_expr)?;
                 // get a ptr to the stored variable
-                let var = self.variables.get(var_name.as_str()).ok_or(
-                    CodeGenError { span: Some(expr.span), message: String::from("Undefined variable.") })?;
+                let var = self.get_var_ptr(var_name)
+                    .ok_or(CodeGenError { span: Some(expr.span), message: String::from("Undefined variable.") })?;
                 // create a store instruction
-                self.builder.build_store(*var, assign_val);
+                self.builder.build_store(var, assign_val);
                 // return the original value
                 Ok(assign_val)
             },
@@ -207,10 +248,14 @@ impl<'ctx> CodeGen<'ctx> {
                     span: Some(expr.span),
                     message: String::from("Constant does not fit into a u64.")
                 })?, false)),
-            Expr_::Var(var_name, _idx_expr) => match self.variables.get(var_name.as_str()) {
-                Some(var) => Ok(self.builder.build_load(*var, var_name.as_str()).into_int_value()),
-                None => Err(CodeGenError { span: Some(expr.span), message: String::from("Undefined variable.") })
-            },
+            Expr_::Var(var_name, _idx_expr) => Ok(self.builder.build_load(
+                    self.get_var_ptr(var_name).ok_or(
+                        CodeGenError {
+                            span: Some(expr.span),
+                            message: String::from("Undefined variable.")
+                        })?,
+                        var_name.as_str())
+                    .into_int_value()),
             Expr_::Call(fn_name, args) => {
                 match self.get_function(&fn_name) {
                     Some(fun) => {
