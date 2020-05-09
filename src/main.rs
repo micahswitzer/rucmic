@@ -6,6 +6,9 @@ use std::error::Error;
 use atty::Stream;
 use clap::Clap;
 
+use inkwell::passes::PassManager;
+use inkwell::module::Module;
+
 mod ast;
 mod lexer;
 mod parser;
@@ -27,7 +30,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             Box::new(std::io::stdin())
         },
     };
-    let _outfile: Box<dyn Write> = match opts.outfile {
+    let mut outfile: Box<dyn Write> = match opts.outfile {
         Some(fname) => {
             eprintln!("you provided an output file named '{}'.", fname);
             Box::new(File::create(fname)?)
@@ -59,6 +62,26 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut codegen = codegen::CodeGen::new(&context, "main");
     // unwrap a present from the code generator
     codegen.compile_program(&program).unwrap();
+
+    eprintln!("Unoptimized:");
+    codegen.module.print_to_stderr();
+
+    let fpm:PassManager<Module> = PassManager::create(());
+    fpm.add_instruction_combining_pass();
+    fpm.add_reassociate_pass();
+    fpm.add_gvn_pass();
+    fpm.add_cfg_simplification_pass();
+    fpm.add_basic_alias_analysis_pass();
+    fpm.add_promote_memory_to_register_pass();
+    fpm.add_instruction_combining_pass();
+    fpm.add_reassociate_pass();
+    //fpm.initialize();
+
+    eprintln!("Optimized");
+    fpm.run_on(&codegen.module);
+
+    let llvm_str = codegen.module.print_to_string();
+    outfile.write_fmt(format_args!("{}", llvm_str.to_string()))?;
 
     // ok...we made it
     Ok(())

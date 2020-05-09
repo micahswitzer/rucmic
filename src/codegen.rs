@@ -14,7 +14,7 @@ use std::env::var;
 
 pub struct CodeGen<'ctx> {
     context: &'ctx Context,
-    module: Module<'ctx>,
+    pub module: Module<'ctx>,
     builder: Builder<'ctx>,
     global_vars: HashMap<String, GlobalValue<'ctx>>,
     local_vars: HashMap<String, PointerValue<'ctx>>,
@@ -167,7 +167,7 @@ impl<'ctx> CodeGen<'ctx> {
                 self.local_vars.reserve(fn_args.len());
 
                 // so I guess this turns args into local vars, not sure why we can't just use them
-                // directly? Maybe SSA is to blame?
+                // directly? Maybe SSA is to blame? Optimization takes care of this anyways...
                 for (i, arg) in fn_val.get_param_iter().enumerate() {
                     let alloca = self.create_entry_block_alloca(
                         &fn_args[i].1, fn_args[i].0.as_str());
@@ -179,7 +179,9 @@ impl<'ctx> CodeGen<'ctx> {
                 self.compile_stmt(fn_body)?;
 
                 // no return value for the last return
-                self.builder.build_return(None);
+                if !fn_ret_type.is_ptr && fn_ret_type.base_type == BaseType::Void {
+                    self.builder.build_return(None);
+                }
 
                 self.local_vars.clear();
 
