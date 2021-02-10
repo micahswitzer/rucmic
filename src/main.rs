@@ -88,7 +88,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 #[derive(Clap)]
 #[clap(version = "0.1", author = "Micah Switzer")]
 struct Opts {
-    #[clap(short = "o", long = "outfile")]
+    #[clap(short = 'o', long = "outfile")]
     outfile: Option<String>,
     infile: Option<String>,
 }
