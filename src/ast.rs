@@ -64,11 +64,15 @@ pub struct Decl {
     pub node: Decl_,
 }
 
+pub type Param = (String, Type);
+pub type ParamList = Vec<Param>;
+
 #[derive(Debug)]
 pub enum Decl_ {
     VarDecl(Type, String),
-    // the statement must be a compound statement (gramatically yes, but the code generator doesn't care)
-    FunDecl(Type, String, Vec<(String, Type)>, Box<Stmt>),
+    // the statement must be a compound statement (gramatically yes,
+    // but the code generator doesn't care)
+    FunDecl(Type, String, ParamList, Option<Box<Stmt>>),
 }
 
 #[derive(Debug)]

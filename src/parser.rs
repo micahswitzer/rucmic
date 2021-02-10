@@ -24,7 +24,7 @@ parser! {
 
     decls: Vec<Decl> {
         => vec![],
-        decls[mut d] fundecl[f] => {
+        decls[mut d] fundef[f] => {
             d.push(f);
             d
         },
@@ -57,23 +57,28 @@ parser! {
         } 
     }
 
-    fundecl: Decl {
-        typeident[ti] LeftParen paramlist[pl] RightParen compoundstmt[st] => Decl {
+    fundecl: (Type, String, ParamList) {
+        typeident[ti] LeftParen paramlist[pl] RightParen => (ti.0, ti.1, pl),
+        Void Ident(s) LeftParen paramlist[pl] RightParen => (Type::new_basic(BaseType::Void), s, pl),
+    }
+
+    fundef: Decl {
+        fundecl[fd] compoundstmt[st] => Decl {
             span: span!(),
-            node: Decl_::FunDecl(ti.0, ti.1, pl, Box::new(st)),
+            node: Decl_::FunDecl(fd.0, fd.1, fd.2, Some(Box::new(st))),
         },
-        Void Ident(s) LeftParen paramlist[pl] RightParen compoundstmt[st] => Decl {
+        fundecl[fd] Semicolon => Decl {
             span: span!(),
-            node: Decl_::FunDecl(Type::new_basic(BaseType::Void), s, pl, Box::new(st)),
+            node: Decl_::FunDecl(fd.0, fd.1, fd.2, None),
         }
     }
 
-    singleparam: (String, Type) {
+    singleparam: Param {
         basictype[t] Ident(s) => (s, Type::new_basic(t)),
         basictype[t] LeftSquare RightSquare Ident(s) => (s, Type::new_ptr(t))
     }
 
-    otherparams: Vec<(String, Type)> {
+    otherparams: ParamList {
         => vec![],
         otherparams[mut pl] Comma singleparam[p] => {
             pl.push(p);
@@ -85,7 +90,7 @@ parser! {
         }
     }
 
-    paramlist: Vec<(String, Type)> {
+    paramlist: ParamList {
         Void => vec![],
         singleparam[fp] otherparams[mut op] => {
             let mut pl = vec![fp];

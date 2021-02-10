@@ -66,7 +66,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     eprintln!("Unoptimized:");
     codegen.module.print_to_stderr();
 
-    let fpm:PassManager<Module> = PassManager::create(());
+    let fpm: PassManager<Module> = PassManager::create(());
     fpm.add_instruction_combining_pass();
     fpm.add_reassociate_pass();
     fpm.add_gvn_pass();
@@ -75,9 +75,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     fpm.add_promote_memory_to_register_pass();
     fpm.add_instruction_combining_pass();
     fpm.add_reassociate_pass();
-    //fpm.initialize();
 
-    eprintln!("Optimized");
     fpm.run_on(&codegen.module);
 
     let llvm_str = codegen.module.print_to_string();

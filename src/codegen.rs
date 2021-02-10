@@ -138,7 +138,7 @@ impl<'ctx> CodeGen<'ctx> {
     /// Compiles a `Decl`
     fn compile_decl(&mut self, decl: &Decl, is_global: bool) -> Result<(), CodeGenError> {
         match &decl.node {
-            Decl_::FunDecl(fn_ret_type, fn_name, fn_args, fn_body) => {
+            Decl_::FunDecl(fn_ret_type, fn_name, fn_args, fn_body_opt) => {
                 assert!(is_global); // functions may only be declared globally
                 if self.module.get_function(fn_name).is_some() {
                     return Err(CodeGenError { span: Some(decl.span), message: String::from("Duplicate function declaration.") });
@@ -158,32 +158,36 @@ impl<'ctx> CodeGen<'ctx> {
                     arg.set_name(fn_args[i].0.as_str());
                 }
 
-                let entry = self.context.append_basic_block(fn_val, "entry");
+                if let Some(fn_body) = fn_body_opt {
 
-                self.builder.position_at_end(entry);
+                    let entry = self.context.append_basic_block(fn_val, "entry");
 
-                self.fn_val_opt = Some(fn_val);
+                    self.builder.position_at_end(entry);
 
-                self.local_vars.reserve(fn_args.len());
+                    self.fn_val_opt = Some(fn_val);
 
-                // so I guess this turns args into local vars, not sure why we can't just use them
-                // directly? Maybe SSA is to blame? Optimization takes care of this anyways...
-                for (i, arg) in fn_val.get_param_iter().enumerate() {
-                    let alloca = self.create_entry_block_alloca(
-                        &fn_args[i].1, fn_args[i].0.as_str());
-                    self.builder.build_store(alloca, arg);
-                    self.local_vars.insert(fn_args[i].0.clone(), alloca);
+                    self.local_vars.reserve(fn_args.len());
+
+                    // so I guess this turns args into local vars, not sure why we can't just use them
+                    // directly? Maybe SSA is to blame? Optimization takes care of this anyways...
+                    for (i, arg) in fn_val.get_param_iter().enumerate() {
+                        let alloca = self.create_entry_block_alloca(
+                            &fn_args[i].1, fn_args[i].0.as_str());
+                        self.builder.build_store(alloca, arg);
+                        self.local_vars.insert(fn_args[i].0.clone(), alloca);
+                    }
+
+                    // compile the function body
+                    self.compile_stmt(fn_body)?;
+
+                    // no return value for the last return
+                    if !fn_ret_type.is_ptr && fn_ret_type.base_type == BaseType::Void {
+                        self.builder.build_return(None);
+                    }
+
+                    self.local_vars.clear();
+
                 }
-
-                // compile the function body
-                self.compile_stmt(fn_body)?;
-
-                // no return value for the last return
-                if !fn_ret_type.is_ptr && fn_ret_type.base_type == BaseType::Void {
-                    self.builder.build_return(None);
-                }
-
-                self.local_vars.clear();
 
                 Ok(())
             },
